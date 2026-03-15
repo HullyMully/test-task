@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -37,6 +38,11 @@ class _PaywallScreenState extends State<PaywallScreen>
   @override
   Widget build(BuildContext context) {
     final subscription = context.watch<SubscriptionProvider>();
+    // padding.bottom is non-zero here because SafeArea(bottom: false) does not
+    // consume it — gives us the true home-indicator / bottom-bar inset.
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final buttonBottomPadding = math.max(bottomInset, 16.0) + 24.0;
+
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -51,8 +57,12 @@ class _PaywallScreenState extends State<PaywallScreen>
           ),
         ),
         child: SafeArea(
+          // bottom: false lets the gradient paint behind the home indicator
+          // while still protecting against the notch / Dynamic Island on top.
+          bottom: false,
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            physics: const ClampingScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(24, 0, 24, buttonBottomPadding),
             child: Column(
               children: [
                 const SizedBox(height: 32),
@@ -72,32 +82,27 @@ class _PaywallScreenState extends State<PaywallScreen>
                 const SizedBox(height: 32),
                 _buildPricingCards(context, subscription),
                 const SizedBox(height: 24),
-                Padding(
-                  padding: EdgeInsets.only(
-                    bottom: MediaQuery.of(context).padding.bottom + 24,
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: FilledButton(
-                      onPressed: () {
-                        subscription.unlockFree();
-                        Navigator.of(context).pushReplacementNamed('/main');
-                      },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFFD4AF37),
-                        foregroundColor: const Color(0xFF0D0D12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        elevation: 0,
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: FilledButton(
+                    onPressed: () {
+                      subscription.unlockFree();
+                      Navigator.of(context).pushReplacementNamed('/main');
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFFD4AF37),
+                      foregroundColor: const Color(0xFF0D0D12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      child: Text(
-                        'Try Free',
-                        style: GoogleFonts.inter(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      'Try Free',
+                      style: GoogleFonts.inter(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -194,7 +199,7 @@ class _PaywallScreenState extends State<PaywallScreen>
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFD4AF37).withOpacity(0.3 * _glowAnimation.value),
+                color: const Color(0xFFD4AF37).withValues(alpha: 0.3 * _glowAnimation.value),
                 blurRadius: 16 + 8 * _glowAnimation.value,
                 spreadRadius: 1,
               ),
@@ -216,7 +221,7 @@ class _PaywallScreenState extends State<PaywallScreen>
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFD4AF37).withOpacity(0.4),
+                          color: const Color(0xFFD4AF37).withValues(alpha: 0.4),
                           blurRadius: 8,
                         ),
                       ],
@@ -237,7 +242,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         );
       },
       child: _GlassCard(
-        borderColor: const Color(0xFFD4AF37).withOpacity(0.6),
+        borderColor: const Color(0xFFD4AF37).withValues(alpha: 0.6),
         borderWidth: 1.5,
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -317,7 +322,7 @@ class _GlassCard extends StatelessWidget {
             border: borderWidth > 0
                 ? Border.all(color: borderColor!, width: borderWidth)
                 : null,
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha: 0.08),
           ),
           child: child,
         ),
