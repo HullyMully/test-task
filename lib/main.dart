@@ -31,8 +31,8 @@ class ZenPulseApp extends StatelessWidget {
         ),
         initialRoute: '/',
         routes: {
-          '/': (context) => const PaywallScreen(),
-          '/main': (context) => const MeditationsScreen(),
+          '/': (context) => const MeditationsScreen(),
+          '/paywall': (context) => const PaywallScreen(),
         },
       ),
     );

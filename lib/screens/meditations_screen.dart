@@ -49,7 +49,7 @@ class _MeditationsScreenState extends State<MeditationsScreen> {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFD4AF37).withOpacity(0.2),
+              color: const Color(0xFFD4AF37).withValues(alpha: 0.2),
               blurRadius: 24,
               offset: const Offset(0, -4),
             ),
@@ -147,7 +147,7 @@ class _MeditationsScreenState extends State<MeditationsScreen> {
         decoration: BoxDecoration(
           color: const Color(0xFF1A1A24),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: const Color(0xFFD4AF37).withOpacity(0.3)),
+          border: Border.all(color: const Color(0xFFD4AF37).withValues(alpha: 0.3)),
         ),
         child: SafeArea(
           top: false,
@@ -178,8 +178,8 @@ class _MeditationsScreenState extends State<MeditationsScreen> {
                   height: 52,
                   child: FilledButton(
                     onPressed: () {
-                      Navigator.of(ctx).pop();
-                      Navigator.of(context).pushReplacement(
+                      Navigator.of(ctx).pop(); // close bottom sheet
+                      Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const PaywallScreen(),
                         ),
@@ -333,7 +333,7 @@ class _MoodButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white.withOpacity(0.08),
+      color: Colors.white.withValues(alpha: 0.08),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
@@ -451,7 +451,7 @@ class _MeditationCard extends StatelessWidget {
                   child: Center(
                     child: Icon(
                       Icons.lock,
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       size: 40,
                     ),
                   ),
