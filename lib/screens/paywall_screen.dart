@@ -47,12 +47,16 @@ class _PaywallScreenState extends State<PaywallScreen>
   @override
   Widget build(BuildContext context) {
     final subscription = context.watch<SubscriptionProvider>();
+    // SafeArea(bottom: false) does NOT consume the bottom inset, so
+    // padding.bottom returns the true home-indicator / nav-bar height.
     final bottomInset = MediaQuery.of(context).padding.bottom;
-    final buttonBottomPadding = math.max(bottomInset, 16.0) + 24.0;
+    final ctaBottomPadding = math.max(bottomInset, 16.0) + 16.0;
     final planSelected = _selectedPlan != null;
 
     return Scaffold(
       body: Container(
+        // Gradient spans the full Scaffold body right down to the physical
+        // bottom edge, so there is never a hard colour change below the CTA.
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -66,90 +70,108 @@ class _PaywallScreenState extends State<PaywallScreen>
         ),
         child: SafeArea(
           bottom: false,
-          child: SingleChildScrollView(
+          child: CustomScrollView(
             physics: const ClampingScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(24, 0, 24, buttonBottomPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Close button row ──────────────────────────────────────
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, color: Colors.white54),
-                      tooltip: 'Close',
-                    ),
-                  ),
-                ),
-
-                // ── Headline ──────────────────────────────────────────────
-                Text(
-                  'Unlock Inner Peace',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.cormorantGaramond(
-                    fontSize: 32,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                _buildBullet('AI Guided meditations tailored to you'),
-                _buildBullet('4K nature sounds & binaural beats'),
-                _buildBullet('Offline mode — practice anywhere'),
-                const SizedBox(height: 32),
-
-                // ── Plan cards ───────────────────────────────────────────
-                _buildMonthlyCard(),
-                const SizedBox(height: 20),
-                _buildYearlyCard(),
-                const SizedBox(height: 24),
-
-                // ── CTA hint ─────────────────────────────────────────────
-                AnimatedOpacity(
-                  duration: const Duration(milliseconds: 300),
-                  opacity: planSelected ? 0.0 : 1.0,
-                  child: Text(
-                    'Select a plan to continue',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                      color: Colors.white38,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // ── Try Free button ───────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: FilledButton(
-                    onPressed: planSelected ? () => _onTryFree(subscription) : null,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFFD4AF37),
-                      disabledBackgroundColor: Colors.white12,
-                      disabledForegroundColor: Colors.white30,
-                      foregroundColor: const Color(0xFF0D0D12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+            slivers: [
+              // Top content -- close button, headline, bullets, plan cards
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(Icons.close, color: Colors.white54),
+                            tooltip: 'Close',
+                          ),
+                        ),
                       ),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      'Try Free',
-                      style: GoogleFonts.inter(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
+                      const SizedBox(height: 4),
+                      Text(
+                        'Unlock Inner Peace',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.cormorantGaramond(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 24),
+                      _buildBullet('AI Guided meditations tailored to you'),
+                      _buildBullet('4K nature sounds & binaural beats'),
+                      _buildBullet('Offline mode — practice anywhere'),
+                      const SizedBox(height: 32),
+                      _buildMonthlyCard(),
+                      const SizedBox(height: 20),
+                      _buildYearlyCard(),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+
+              // CTA section -- always pinned to the bottom of the viewport.
+              //
+              // SliverFillRemaining(hasScrollBody: false) stretches to claim
+              // whatever vertical space is left after the top sliver. On a
+              // tall screen the CTA floats to the very bottom; on a compact
+              // screen the scroll view takes over and the CTA follows directly
+              // below the cards -- no void in either case.
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(24, 24, 24, ctaBottomPadding),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      AnimatedOpacity(
+                        duration: const Duration(milliseconds: 300),
+                        opacity: planSelected ? 0.0 : 1.0,
+                        child: Text(
+                          'Select a plan to continue',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            color: Colors.white38,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 56,
+                        child: FilledButton(
+                          onPressed: planSelected
+                              ? () => _onTryFree(subscription)
+                              : null,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFD4AF37),
+                            disabledBackgroundColor: Colors.white12,
+                            disabledForegroundColor: Colors.white30,
+                            foregroundColor: const Color(0xFF0D0D12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 0,
+                          ),
+                          child: Text(
+                            'Try Free',
+                            style: GoogleFonts.inter(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -163,7 +185,7 @@ class _PaywallScreenState extends State<PaywallScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '•',
+            '\u2022',
             style: GoogleFonts.inter(
               color: const Color(0xFFD4AF37),
               fontSize: 20,
@@ -277,8 +299,8 @@ class _PaywallScreenState extends State<PaywallScreen>
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFD4AF37)
-                              .withValues(alpha: 0.4),
+                          color:
+                              const Color(0xFFD4AF37).withValues(alpha: 0.4),
                           blurRadius: 8,
                         ),
                       ],
@@ -365,7 +387,6 @@ class _PaywallScreenState extends State<PaywallScreen>
   }
 }
 
-/// Small radio-style selection indicator used on each plan card.
 class _PlanSelector extends StatelessWidget {
   final bool isSelected;
   const _PlanSelector({required this.isSelected});
@@ -379,13 +400,9 @@ class _PlanSelector extends StatelessWidget {
       height: 24,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: isSelected
-            ? const Color(0xFFD4AF37)
-            : Colors.transparent,
+        color: isSelected ? const Color(0xFFD4AF37) : Colors.transparent,
         border: Border.all(
-          color: isSelected
-              ? const Color(0xFFD4AF37)
-              : Colors.white38,
+          color: isSelected ? const Color(0xFFD4AF37) : Colors.white38,
           width: 2,
         ),
       ),
