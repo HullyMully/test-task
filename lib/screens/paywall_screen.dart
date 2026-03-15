@@ -14,16 +14,23 @@ class PaywallScreen extends StatefulWidget {
   State<PaywallScreen> createState() => _PaywallScreenState();
 }
 
+// Two AnimationControllers → TickerProviderStateMixin (plural).
 class _PaywallScreenState extends State<PaywallScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
+  // Slow breathe: drives outer box-shadow intensity and badge glow.
   late AnimationController _glowController;
   late Animation<double> _glowAnimation;
+
+  // Constant-speed sweep: drives the comet of light on the border.
+  late AnimationController _sweepController;
+  late Animation<double> _sweepAnimation;
 
   _Plan? _selectedPlan;
 
   @override
   void initState() {
     super.initState();
+
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
@@ -31,11 +38,21 @@ class _PaywallScreenState extends State<PaywallScreen>
     _glowAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
+
+    // One full revolution every 5 seconds, linear, forever.
+    _sweepController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 5000),
+    )..repeat();
+    _sweepAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _sweepController, curve: Curves.linear),
+    );
   }
 
   @override
   void dispose() {
     _glowController.dispose();
+    _sweepController.dispose();
     super.dispose();
   }
 
@@ -47,16 +64,12 @@ class _PaywallScreenState extends State<PaywallScreen>
   @override
   Widget build(BuildContext context) {
     final subscription = context.watch<SubscriptionProvider>();
-    // SafeArea(bottom: false) does NOT consume the bottom inset, so
-    // padding.bottom returns the true home-indicator / nav-bar height.
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final ctaBottomPadding = math.max(bottomInset, 16.0) + 16.0;
     final planSelected = _selectedPlan != null;
 
     return Scaffold(
       body: Container(
-        // Gradient spans the full Scaffold body right down to the physical
-        // bottom edge, so there is never a hard colour change below the CTA.
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -73,7 +86,6 @@ class _PaywallScreenState extends State<PaywallScreen>
           child: CustomScrollView(
             physics: const ClampingScrollPhysics(),
             slivers: [
-              // Top content -- close button, headline, bullets, plan cards
               SliverPadding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 sliver: SliverToBoxAdapter(
@@ -104,23 +116,16 @@ class _PaywallScreenState extends State<PaywallScreen>
                       const SizedBox(height: 24),
                       _buildBullet('AI Guided meditations tailored to you'),
                       _buildBullet('4K nature sounds & binaural beats'),
-                      _buildBullet('Offline mode — practice anywhere'),
+                      _buildBullet('Offline mode \u2014 practice anywhere'),
                       const SizedBox(height: 32),
                       _buildMonthlyCard(),
-                      const SizedBox(height: 20),
+                      // Extra gap so the "Most Popular" badge has room above.
+                      const SizedBox(height: 30),
                       _buildYearlyCard(),
                     ],
                   ),
                 ),
               ),
-
-              // CTA section -- always pinned to the bottom of the viewport.
-              //
-              // SliverFillRemaining(hasScrollBody: false) stretches to claim
-              // whatever vertical space is left after the top sliver. On a
-              // tall screen the CTA floats to the very bottom; on a compact
-              // screen the scroll view takes over and the CTA follows directly
-              // below the cards -- no void in either case.
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: Padding(
@@ -203,6 +208,8 @@ class _PaywallScreenState extends State<PaywallScreen>
     );
   }
 
+  // ── Monthly card ──────────────────────────────────────────────────────────
+
   Widget _buildMonthlyCard() {
     final isSelected = _selectedPlan == _Plan.monthly;
     return GestureDetector(
@@ -261,57 +268,180 @@ class _PaywallScreenState extends State<PaywallScreen>
     );
   }
 
+  // ── Yearly card (premium) ─────────────────────────────────────────────────
+
   Widget _buildYearlyCard() {
     final isSelected = _selectedPlan == _Plan.yearly;
+
+    // Listen to both animations together so the builder fires on every tick
+    // of either the glow breathe or the border sweep.
     return AnimatedBuilder(
-      animation: _glowAnimation,
-      builder: (context, child) {
-        final glowOpacity = isSelected
-            ? 0.45 * _glowAnimation.value
-            : 0.25 * _glowAnimation.value;
+      animation: Listenable.merge([_glowAnimation, _sweepAnimation]),
+      builder: (context, _) {
+        final pulse = _glowAnimation.value; // 0.4 → 1.0
+        final sweepAngle = _sweepAnimation.value * 2 * math.pi; // 0 → 2π
+
+        // Outer ambient glow — soft and large.
+        final outerGlowOpacity =
+            isSelected ? 0.35 + 0.15 * pulse : 0.15 + 0.08 * pulse;
+        // Inner glow — tighter, makes the card pop from the background.
+        final innerGlowOpacity =
+            isSelected ? 0.25 * pulse : 0.10 * pulse;
+
         return Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFFD4AF37).withValues(alpha: glowOpacity),
+                color: const Color(0xFFD4AF37).withValues(alpha: outerGlowOpacity),
                 blurRadius: isSelected
-                    ? 20 + 10 * _glowAnimation.value
-                    : 14 + 6 * _glowAnimation.value,
-                spreadRadius: 1,
+                    ? 28 + 12 * pulse
+                    : 18 + 6 * pulse,
+                spreadRadius: 0,
+                offset: const Offset(0, 2),
+              ),
+              BoxShadow(
+                color: const Color(0xFFD4AF37).withValues(alpha: innerGlowOpacity),
+                blurRadius: 8,
+                spreadRadius: 0,
               ),
             ],
           ),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              child!,
+              // Card with the animated sweep border painted over it.
+              GestureDetector(
+                onTap: () => setState(() => _selectedPlan = _Plan.yearly),
+                child: CustomPaint(
+                  // foregroundPainter draws on top of the card but is not
+                  // clipped by the ClipRRect inside _GlassCard.
+                  foregroundPainter: _SweepBorderPainter(
+                    angle: sweepAngle,
+                    pulse: pulse,
+                    isSelected: isSelected,
+                  ),
+                  child: _GlassCard(
+                    // The static border is hidden; the CustomPainter owns it.
+                    borderColor: Colors.transparent,
+                    borderWidth: 0,
+                    // Subtle warm gold tint distinguishes this from monthly.
+                    backgroundColor:
+                        const Color(0xFFD4AF37).withValues(alpha: 0.06),
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.auto_awesome,
+                                    color: const Color(0xFFD4AF37)
+                                        .withValues(alpha: 0.9),
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Yearly',
+                                    style: GoogleFonts.inter(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                '\$59.99 / year',
+                                style: GoogleFonts.inter(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2D5016),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'Save 50%',
+                                  style: GoogleFonts.inter(
+                                    color: const Color(0xFF90EE90),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              _PlanSelector(isSelected: isSelected),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── "Most Popular" badge ──────────────────────────────────────
+              // Floats 16px above the card top via Clip.none on the Stack.
               Positioned(
-                top: -12,
+                top: -16,
                 left: 0,
                 right: 0,
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
+                        horizontal: 14, vertical: 7),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD4AF37),
+                      gradient: const LinearGradient(
+                        colors: [
+                          Color(0xFFFFE066),
+                          Color(0xFFD4AF37),
+                          Color(0xFFC8960C),
+                        ],
+                        stops: [0.0, 0.5, 1.0],
+                      ),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
+                        // Breathes with the glow animation.
                         BoxShadow(
-                          color:
-                              const Color(0xFFD4AF37).withValues(alpha: 0.4),
-                          blurRadius: 8,
+                          color: const Color(0xFFD4AF37)
+                              .withValues(alpha: 0.35 + 0.25 * pulse),
+                          blurRadius: 10 + 6 * pulse,
+                          spreadRadius: 0,
                         ),
                       ],
                     ),
-                    child: Text(
-                      'Most Popular',
-                      style: GoogleFonts.inter(
-                        color: const Color(0xFF0D0D12),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.auto_awesome,
+                          color: Color(0xFF3A2800),
+                          size: 12,
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'MOST POPULAR',
+                          style: GoogleFonts.inter(
+                            color: const Color(0xFF3A2800),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -320,72 +450,87 @@ class _PaywallScreenState extends State<PaywallScreen>
           ),
         );
       },
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedPlan = _Plan.yearly),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOut,
-          child: _GlassCard(
-            borderColor: isSelected
-                ? const Color(0xFFD4AF37)
-                : const Color(0xFFD4AF37).withValues(alpha: 0.45),
-            borderWidth: isSelected ? 2.0 : 1.5,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Yearly',
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(
-                        '\$59.99 / year',
-                        style: GoogleFonts.inter(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2D5016),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Save 50%',
-                          style: GoogleFonts.inter(
-                            color: const Color(0xFF90EE90),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      _PlanSelector(isSelected: isSelected),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
+
+// ── Sweep border painter ───────────────────────────────────────────────────
+//
+// Draws a SweepGradient stroke around the rounded-rectangle border.
+// The gradient has a bright gold "head" that fades into a long dim tail,
+// making a comet-like shimmer that rotates continuously.
+
+class _SweepBorderPainter extends CustomPainter {
+  final double angle;      // current head position in radians (0 → 2π)
+  final double pulse;      // from glowAnimation (0.4 → 1.0)
+  final bool isSelected;
+
+  const _SweepBorderPainter({
+    required this.angle,
+    required this.pulse,
+    required this.isSelected,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const borderRadius = 20.0;
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect,
+      const Radius.circular(borderRadius),
+    );
+
+    final double headOpacity = isSelected ? 0.95 : 0.65;
+    final double tailOpacity = isSelected ? 0.10 : 0.05;
+
+    // Sweep gradient: bright head at `angle`, long dim tail trailing behind.
+    final sweepShader = SweepGradient(
+      center: Alignment.center,
+      startAngle: angle,
+      endAngle: angle + 2 * math.pi,
+      colors: [
+        const Color(0xFFFFE066).withOpacity(headOpacity),
+        const Color(0xFFD4AF37).withOpacity(headOpacity * 0.75),
+        const Color(0xFFD4AF37).withOpacity(tailOpacity * 1.5),
+        const Color(0xFF8B6914).withOpacity(tailOpacity),
+        const Color(0xFFFFE066).withOpacity(headOpacity),
+      ],
+      stops: const [0.0, 0.10, 0.40, 0.80, 1.0],
+    ).createShader(rect);
+
+    final strokeWidth = isSelected ? 2.5 : 1.8;
+
+    // Main animated border stroke.
+    canvas.drawRRect(
+      rrect,
+      Paint()
+        ..shader = sweepShader
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth,
+    );
+
+    // When selected, add a soft ambient halo around the border that breathes.
+    if (isSelected) {
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color =
+              const Color(0xFFD4AF37).withOpacity(0.06 + 0.06 * pulse)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth + 5
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SweepBorderPainter old) =>
+      old.angle != angle ||
+      old.pulse != pulse ||
+      old.isSelected != isSelected;
+}
+
+// ── Plan radio indicator ───────────────────────────────────────────────────
 
 class _PlanSelector extends StatelessWidget {
   final bool isSelected;
@@ -413,15 +558,19 @@ class _PlanSelector extends StatelessWidget {
   }
 }
 
+// ── Glass card ────────────────────────────────────────────────────────────
+
 class _GlassCard extends StatelessWidget {
   final Widget child;
   final Color borderColor;
   final double borderWidth;
+  final Color? backgroundColor; // overrides the default white-glass tint
 
   const _GlassCard({
     required this.child,
     required this.borderColor,
     required this.borderWidth,
+    this.backgroundColor,
   });
 
   @override
@@ -434,7 +583,7 @@ class _GlassCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: borderColor, width: borderWidth),
-            color: Colors.white.withValues(alpha: 0.08),
+            color: backgroundColor ?? Colors.white.withValues(alpha: 0.08),
           ),
           child: child,
         ),
